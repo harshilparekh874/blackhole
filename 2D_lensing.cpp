@@ -17,7 +17,7 @@ double c = 299792458.0;
 double G = 6.67430e-11;
 
 struct Ray;
-void rk4Step(Ray& ray, double dλ, double rs);
+void rk4Step(Ray& ray, double d, double rs);
 
 // --- Structs --- //
 struct Engine {
@@ -109,8 +109,8 @@ struct Ray{
         // step 3) store conserved quantities
         L = r*r * dphi;
         double f = 1.0 - SagA.r_s/r;  
-        double dt_dλ = sqrt( (dr*dr)/(f*f) + (r*r*dphi*dphi)/f );
-        E = f * dt_dλ;
+        double dt_d = sqrt( (dr*dr)/(f*f) + (r*r*dphi*dphi)/f );
+        E = f * dt_d;
         // step 4) start trail :
         trail.push_back({x, y});
     }
@@ -136,7 +136,7 @@ struct Ray{
     
             glBegin(GL_LINE_STRIP);
             for (size_t i = 0; i < N; ++i) {
-                // older points (i=0) get alpha≈0, newer get alpha≈1
+                // older points (i=0) get alpha0, newer get alpha1
                 float alpha = float(i) / float(N - 1);
                 glColor4f(1.0f, 1.0f, 1.0f, std::max(alpha, 0.05f));
                 glVertex2f(ray.trail[i].x, ray.trail[i].y);
@@ -146,10 +146,10 @@ struct Ray{
     
         glDisable(GL_BLEND);
     }
-    void step(double dλ, double rs) {
-        // 1) integrate (r,φ,dr,dφ)
+    void step(double d, double rs) {
+        // 1) integrate (r,,dr,d)
         if(r <= rs) return; // stop if inside the event horizon
-        rk4Step(*this, dλ, rs);
+        rk4Step(*this, d, rs);
 
         // 2) convert back to cartesian x,y
         x = r * cos(phi);
@@ -169,46 +169,46 @@ void geodesicRHS(const Ray& ray, double rhs[4], double rs) {
 
     double f = 1.0 - rs/r;
 
-    // dr/dλ = dr
+    // dr/d = dr
     rhs[0] = dr;
-    // dφ/dλ = dphi
+    // d/d = dphi
     rhs[1] = dphi;
 
-    // d²r/dλ² from Schwarzschild null geodesic:
-    double dt_dλ = E / f;
+    // dr/d from Schwarzschild null geodesic:
+    double dt_d = E / f;
     rhs[2] = 
-        - (rs/(2*r*r)) * f * (dt_dλ*dt_dλ)
+        - (rs/(2*r*r)) * f * (dt_d*dt_d)
         + (rs/(2*r*r*f)) * (dr*dr)
         + (r - rs) * (dphi*dphi);
 
-    // d²φ/dλ² = -2*(dr * dphi) / r
+    // d/d = -2*(dr * dphi) / r
     rhs[3] = -2.0 * dr * dphi / r;
 }
 void addState(const double a[4], const double b[4], double factor, double out[4]) {
     for (int i = 0; i < 4; i++)
         out[i] = a[i] + b[i] * factor;
 }
-void rk4Step(Ray& ray, double dλ, double rs) {
+void rk4Step(Ray& ray, double d, double rs) {
     double y0[4] = { ray.r, ray.phi, ray.dr, ray.dphi };
     double k1[4], k2[4], k3[4], k4[4], temp[4];
 
     geodesicRHS(ray, k1, rs);
-    addState(y0, k1, dλ/2.0, temp);
+    addState(y0, k1, d/2.0, temp);
     Ray r2 = ray; r2.r=temp[0]; r2.phi=temp[1]; r2.dr=temp[2]; r2.dphi=temp[3];
     geodesicRHS(r2, k2, rs);
 
-    addState(y0, k2, dλ/2.0, temp);
+    addState(y0, k2, d/2.0, temp);
     Ray r3 = ray; r3.r=temp[0]; r3.phi=temp[1]; r3.dr=temp[2]; r3.dphi=temp[3];
     geodesicRHS(r3, k3, rs);
 
-    addState(y0, k3, dλ, temp);
+    addState(y0, k3, d, temp);
     Ray r4 = ray; r4.r=temp[0]; r4.phi=temp[1]; r4.dr=temp[2]; r4.dphi=temp[3];
     geodesicRHS(r4, k4, rs);
 
-    ray.r    += (dλ/6.0)*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
-    ray.phi  += (dλ/6.0)*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
-    ray.dr   += (dλ/6.0)*(k1[2] + 2*k2[2] + 2*k3[2] + k4[2]);
-    ray.dphi += (dλ/6.0)*(k1[3] + 2*k2[3] + 2*k3[3] + k4[3]);
+    ray.r    += (d/6.0)*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+    ray.phi  += (d/6.0)*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    ray.dr   += (d/6.0)*(k1[2] + 2*k2[2] + 2*k3[2] + k4[2]);
+    ray.dphi += (d/6.0)*(k1[3] + 2*k2[3] + 2*k3[3] + k4[3]);
 }
 
 

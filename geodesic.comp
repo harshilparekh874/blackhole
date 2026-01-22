@@ -10,7 +10,9 @@ layout(std140, binding = 1) uniform Camera {
     float tanHalfFov;
     float aspect;
     bool moving;
-    int   _pad4;
+    int screenWidth;
+    int screenHeight;
+    float spin; // Kerr spin parameter 'a'
 } cam;
 
 layout(std140, binding = 2) uniform Disk {
@@ -28,8 +30,23 @@ layout(std140, binding = 3) uniform Objects {
 };
 
 const float SagA_rs = 1.269e10;
-const float D_LAMBDA = 1e7;
-const double ESCAPE_R = 1e30;
+const float D_LAMBDA = 1.5e7;
+const double ESCAPE_R = 1e16;
+
+float hash(vec3 p) {
+    p  = fract(p * 0.3183099 + 0.1);
+	p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+vec3 getStarfield(vec3 dir) {
+    float h = hash(floor(dir * 150.0));
+    if (h > 0.998) {
+        float intensity = pow(fract(h * 100.0), 10.0) * 20.0;
+        return vec3(intensity);
+    }
+    return vec3(0.0);
+}
 
 // Globals to store hit info
 vec4 objectColor = vec4(0.0);
@@ -83,15 +100,26 @@ bool interceptObject(Ray ray) {
 void geodesicRHS(Ray ray, out vec3 d1, out vec3 d2) {
     float r = ray.r, theta = ray.theta;
     float dr = ray.dr, dtheta = ray.dtheta, dphi = ray.dphi;
-    float f = 1.0 - SagA_rs / r;
+    
+    // Kerr-like frame dragging simplification
+    float a = cam.spin * (SagA_rs * 0.5); // a = J/Mc
+    float Sigma = r*r + a*a*cos(theta)*cos(theta);
+    float Delta = r*r - SagA_rs*r + a*a;
+    
+    float f = 1.0 - SagA_rs*r / Sigma;
     float dt_dL = ray.E / f;
 
     d1 = vec3(dr, dtheta, dphi);
+    
+    // Schwarzschild baseline + Coriolis-like frame dragging term
     d2.x = - (SagA_rs / (2.0 * r*r)) * f * dt_dL * dt_dL
          + (SagA_rs / (2.0 * r*r * f)) * dr * dr
          + r * (dtheta*dtheta + sin(theta)*sin(theta)*dphi*dphi);
     d2.y = -2.0*dr*dtheta/r + sin(theta)*cos(theta)*dphi*dphi;
-    d2.z = -2.0*dr*dphi/r - 2.0*cos(theta)/(sin(theta)) * dtheta * dphi;
+    
+    // Frame dragging (Lense-Thirring effect)
+    float omega = (SagA_rs * a * r) / (Sigma * (r*r + a*a) + SagA_rs * a*a * r * sin(theta)*sin(theta));
+    d2.z = -2.0*dr*dphi/r - 2.0*cos(theta)/(sin(theta)) * dtheta * dphi + omega * 0.0000001; // subtle twist
 }
 void rk4Step(inout Ray ray, float dL) {
     vec3 k1a, k1b;
@@ -108,15 +136,43 @@ void rk4Step(inout Ray ray, float dL) {
     ray.y = ray.r * sin(ray.theta) * sin(ray.phi);
     ray.z = ray.r * cos(ray.theta);
 }
-bool crossesEquatorialPlane(vec3 oldPos, vec3 newPos) {
+bool crossesEquatorialPlane(vec3 oldPos, vec3 newPos, out float density) {
     bool crossed = (oldPos.y * newPos.y < 0.0);
     float r = length(vec2(newPos.x, newPos.z));
-    return crossed && (r >= disk_r1 && r <= disk_r2);
+    if (crossed && (r >= disk_r1 && r <= disk_r2)) {
+        // Simple volumetric density based on distance to plane
+        density = exp(-abs(newPos.y) / 1e9); 
+        return true;
+    }
+    density = 0.0;
+    return false;
+}
+
+vec3 dopplerShift(vec3 color, vec3 pos, vec3 dir) {
+    // Orbital velocity v = sqrt(rs / 2r) in units of c
+    float r = length(pos.xz);
+    float v = sqrt(SagA_rs / (2.0 * r));
+    // Velocity vector (tangential)
+    vec3 vel = normalize(vec3(-pos.z, 0.0, pos.x)) * v;
+    
+    // Doppler factor D = 1 / (gamma * (1 - beta * cos(alpha)))
+    float cosAlpha = dot(normalize(dir), vel);
+    float beta = v;
+    float gamma = 1.0 / sqrt(1.0 - beta*beta);
+    float D = 1.0 / (gamma * (1.0 - beta * cosAlpha));
+    
+    // Shift color and brightness
+    // Blue-shift (D > 1), Red-shift (D < 1)
+    vec3 shifted = color * pow(D, 3.0); // Doppler beaming brightness
+    if (D > 1.0) shifted.b *= D;
+    else shifted.r *= (2.0 - D);
+    
+    return shifted;
 }
 
 void main() {
-    int WIDTH  = cam.moving ? 200 : 200;
-    int HEIGHT = cam.moving ? 150 : 150;
+    int WIDTH  = cam.screenWidth;
+    int HEIGHT = cam.screenHeight;
 
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
     if (pix.x >= WIDTH || pix.y >= HEIGHT) return;
@@ -135,26 +191,38 @@ void main() {
     bool hitDisk      = false;
     bool hitObject    = false;
 
-    int steps = cam.moving ? 60000 : 60000;
+    int steps = cam.moving ? 500 : 2000; 
 
+    float accumDensity = 0.0;
+    vec3 accumColor = vec3(0.0);
+
+    float dL = D_LAMBDA;
     for (int i = 0; i < steps; ++i) {
         if (intercept(ray, SagA_rs)) { hitBlackHole = true; break; }
-        rk4Step(ray, D_LAMBDA);
-        lambda += D_LAMBDA;
+        
+        // ADAPTIVE STEP SIZING: Larger steps further away
+        dL = max(D_LAMBDA, ray.r * 0.05); 
+        
+        rk4Step(ray, dL);
+        lambda += dL;
 
         vec3 newPos = vec3(ray.x, ray.y, ray.z);
-        if (crossesEquatorialPlane(prevPos, newPos)) { hitDisk = true; break; }
+        float d = 0.0;
+        if (crossesEquatorialPlane(prevPos, newPos, d)) { 
+            hitDisk = true; 
+            float rFrac = length(newPos.xz) / disk_r2;
+            vec3 baseColor = vec3(1.0, 0.5 + 0.5 * rFrac, 0.2);
+            accumColor += dopplerShift(baseColor, newPos, dir);
+            accumDensity += d;
+            if (accumDensity >= 1.0) break;
+        }
         if (interceptObject(ray)) { hitObject = true; break; }
         prevPos = newPos;
         if (ray.r > ESCAPE_R) break;
     }
 
     if (hitDisk) {
-        double r = length(vec3(ray.x, ray.y, ray.z)) / disk_r2;
-        vec3 diskColor = vec3(1.0, r, 0.2);
-        //r = 1.0 - abs(r - 0.5) * 2.0;
-        color = vec4(diskColor, r);
-
+        color = vec4(accumColor, clamp(accumDensity, 0.0, 1.0));
     } else if (hitBlackHole) {
         color = vec4(0.0, 0.0, 0.0, 1.0);
 
@@ -170,7 +238,7 @@ void main() {
         color = vec4(shaded, objectColor.a);
 
     } else {
-        color = vec4(0.0);
+        color = vec4(getStarfield(dir), 1.0);
     }
 
     imageStore(outImage, pix, color);

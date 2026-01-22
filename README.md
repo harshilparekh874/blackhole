@@ -1,73 +1,81 @@
-# **black**_**hole**
+# **Black Hole Visualizer**
 
-Black hole simulation project
+A high-performance, real-time General Relativity simulator using C++ and OpenGL Compute Shaders. This project simulates the complex spacetime curvature around black holes, including gravitational lensing, accretion disks, and frame-dragging.
 
-Here is the black hole raw code, everything will be inside a src bin incase you want to copy the files
+![Black Hole Simulation](https://via.placeholder.com/800x450?text=Black+Hole+Simulation) *(Generate your own stunning screenshots in-app!)*
 
-I'm writing this as I'm beginning this project (hopefully I complete it ;D) here is what I plan to do:
+## **🚀 New Features**
 
-1. Ray-tracing : add ray tracing to the gravity simulation to simulate gravitational lensing
+- **🌌 Procedural Starfield**: Accurate gravitational lensing visualization using a procedural noise-based background.
+- **🌀 Kerr Metric Support**: Simulate rotating black holes with adjustable spin parameters and **Lense-Thirring frame-dragging**.
+- **💥 Relativistic Doppler Shifting**: Real-time color shifting (blue-shift/red-shift) and relativistic beaming for the accretion disk.
+- **☁️ Volumetric Accretion Disk**: Ray-marched volumetric gas simulation for a smoother, more realistic disk appearance.
+- **🖥️ Interactive ImGui UI**: Real-time control panel to adjust physics, resolution, and rendering quality.
+- **⚡ Performance Optimizations**:
+  - **Adaptive Step Sizing**: RK4 integrator that scales steps based on distance from the singularity.
+  - **Dynamic Resolution**: Automatically balances quality and FPS during camera movement.
+  - **GPU Acceleration**: Heavy geodesic integration performed entirely in OpenGL Compute Shaders.
 
-2. Accretion disk : simulate accreciate disk using the ray tracing + the halos
+---
 
-3. Spacetime curvature : demonstrate visually the "trapdoor in spacetime" that is black holes using spacetime grid
+## **🎮 Controls**
 
-4. [optional] try to make it run realtime ;D
+### **Mouse**
+- **Left Click + Drag**: Orbit the black hole.
+- **Scroll**: Zoom in/out.
+- **UI Sliders**: Adjust render scale, black hole spin, and gravity.
 
-I hope it works :/
+### **Keyboard Shortcuts**
+- **`1` / `2`**: Decrease / Increase **Render Scale** (Quality vs speed).
+- **`3` / `4`**: Decrease / Increase **Black Hole Spin** (Kerr parameter).
+- **`5`**: Toggle **Performance Mode** (Dynamic resolution).
+- **`G`**: Toggle **N-Body Gravity** simulation.
 
-Edit: After completion of project -
+---
 
-Thank you everyone for checking out the video, if you haven't it explains code in detail: https://www.youtube.com/watch?v=8-B6ryuBkCM
+## **🛠 Building Requirements**
 
-## **Building Requirements:**
+1. **C++ Compiler**: Supporting C++17 or newer.
+2. **[CMake](https://cmake.org/)**: Version 3.21+.
+3. **[Vcpkg](https://vcpkg.io/en/)**: For dependency management.
+4. **[Git](https://git-scm.com/)**: For cloning and updating.
 
-1. C++ Compiler supporting C++ 17 or newer
+## **⚙️ Build Instructions**
 
-2. [Cmake](https://cmake.org/)
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/kavan010/blackhole.git
+   cd blackhole
+   ```
 
-3. [Vcpkg](https://vcpkg.io/en/)
+2. **Install dependencies**:
+   ```bash
+   vcpkg install
+   ```
 
-4. [Git](https://git-scm.com/)
+3. **Configure and Build**:
+   ```bash
+   cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path_to_vcpkg]/scripts/buildsystems/vcpkg.cmake
+   cmake --build build --config Release
+   ```
 
-## **Build Instructions:**
+4. **Run the program**:
+   The executable will be located in `build/Release/BlackHole3D.exe`.
 
-1. Clone the repository:
-	-  `git clone https://github.com/kavan010/black_hole.git`
-2. CD into the newly cloned directory
-	- `cd ./black_hole` 
-3. Install dependencies with Vcpkg
-	- `vcpkg install`
-4. Get the vcpkg cmake toolchain file path
-	- `vcpkg integrate install`
-	- This will output something like : `CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake"`
-5. Create a build directory
-	- `mkdir build`
-6. Configure project with CMake
-	-  `cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake`
-	- Use the vcpkg cmake toolchain path from above
-7. Build the project
-	- `cmake --build build`
-8. Run the program
-	- The executables will be located in the build folder
+---
 
-### Alternative: Debian/Ubuntu apt workaround
+## **🔬 How it Works**
 
-If you don't want to use vcpkg, or you just need a quick way to install the native development packages on Debian/Ubuntu, install these packages and then run the normal CMake steps above:
+The simulation uses an **RK4 (Runge-Kutta 4th Order) integrator** to solve the null geodesic equations for light rays. 
 
-```bash
-sudo apt update
-sudo apt install build-essential cmake \
-	libglew-dev libglfw3-dev libglm-dev libgl1-mesa-dev
-```
+- **Schwarzschild & Kerr Metrics**: The code integrates the path of light through curved spacetime.
+- **Compute Shader**: All heavy-duty integration is performed in `geodesic.comp`, allowing for thousands of rays to be integrated in parallel.
+- **UBO (Uniform Buffer Objects)**: Parameters like camera position, black hole mass, and spin are synced to the GPU every frame for interactive feedback.
 
-This provides the GLEW, GLFW, GLM and OpenGL development files so `find_package(...)` calls in `CMakeLists.txt` can locate the libraries. After installing, run the `cmake -B build -S .` and `cmake --build build` commands as shown in the Build Instructions.
+---
 
-## **How the code works:**
-for 2D: simple, just run 2D_lensing.cpp with the nessesary dependencies installed.
+## **📺 Acknowledgments**
+Original concept and logic overview can be found here: [YouTube Video Explanation](https://www.youtube.com/watch?v=8-B6ryuBkCM)
 
-for 3D: black_hole.cpp and geodesic.comp work together to run the simuation faster using GPU, essentially it sends over a UBO and geodesic.comp runs heavy calculations using that data.
-
-should work with nessesary dependencies installed, however I have only run it on windows with my GPU so am not sure!
-
-LMK if you would like an in-depth explanation of how the code works aswell :)
+---
+*Created with ❤️ by the Black Hole Sim team.*
