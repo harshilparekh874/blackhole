@@ -74,8 +74,3 @@ The simulation uses an **RK4 (Runge-Kutta 4th Order) integrator** to solve the n
 
 ---
 
-## **📺 Acknowledgments**
-Original concept and logic overview can be found here: [YouTube Video Explanation](https://www.youtube.com/watch?v=8-B6ryuBkCM)
-
----
-*Created with ❤️ by the Black Hole Sim team.*
